@@ -110,9 +110,9 @@ public static class Preflight
     /// <summary>
     /// Detects unhydrated Git LFS content in the server assets: throws when items.json is still a small LFS pointer.
     /// </summary>
-    public static void CheckServerLfs(string serverPath)
+    public static void CheckServerLfs(string serverPath, bool nodeServer)
     {
-        var marker = ServerLayout.Detect(serverPath).AssetPath("database", "templates", "items.json");
+        var marker = AssetPath(serverPath, nodeServer, "database", "templates", "items.json");
 
         // THe real content is much larger than a pointer file... skip when the marker is missing or already large.
         if (!File.Exists(marker) || new FileInfo(marker).Length > 1024)
@@ -135,9 +135,9 @@ public static class Preflight
     /// <summary>
     /// Reads compatibleTarkovVersion from the server's core.json and returns the trailing client build number.
     /// </summary>
-    public static string ReadClientVersion(string serverPath)
+    public static string ReadClientVersion(string serverPath, bool nodeServer)
     {
-        var coreJsonPath = ServerLayout.Detect(serverPath).AssetPath("configs", "core.json");
+        var coreJsonPath = AssetPath(serverPath, nodeServer, "configs", "core.json");
         if (!File.Exists(coreJsonPath))
         {
             throw new BentoException(
@@ -188,5 +188,12 @@ public static class Preflight
         }
 
         return result.StdOut;
+    }
+    
+    private static string AssetPath(string serverPath, bool nodeServer, params string[] segments)
+    {
+        return nodeServer
+            ? Path.Combine([serverPath, "project", "assets", .. segments])
+            : ServerLayout.Detect(serverPath).AssetPath(segments);
     }
 }

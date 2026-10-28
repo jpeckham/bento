@@ -62,6 +62,60 @@ public class BuildRulesTests
     }
 
     /// <summary>
+    /// Maps a version to the directory its runtime sits in inside the release, empty being the archive root.
+    /// </summary>
+    [TestCase("3.9.8", ExpectedResult = "")]
+    [TestCase("3.11.4", ExpectedResult = "")]
+    [TestCase("4.0.13", ExpectedResult = "SPT")]
+    [TestCase("4.1.6", ExpectedResult = "SPT_Runtime")]
+    [TestCase("4.10.0", ExpectedResult = "SPT_Runtime")]
+    [TestCase("5.0.0", ExpectedResult = "SPT_Runtime")]
+    public string RuntimeFolderFor(string version)
+    {
+        return BuildRules.RuntimeFolderFor(version);
+    }
+
+    /// <summary>
+    /// Reads the second segment of a version, defaulting to zero when there is none.
+    /// </summary>
+    [TestCase("4.1.6", ExpectedResult = 1)]
+    [TestCase("4.0.13", ExpectedResult = 0)]
+    [TestCase("4.10.0", ExpectedResult = 10)]
+    [TestCase("4", ExpectedResult = 0)]
+    public int MinorOf(string version)
+    {
+        return BuildRules.MinorOf(version);
+    }
+
+    /// <summary>
+    /// Maps each build type to the gulp task the 3.x Node server builds with.
+    /// </summary>
+    [TestCase(SptBuildType.Release, ExpectedResult = "build:release")]
+    [TestCase(SptBuildType.Debug, ExpectedResult = "build:debug")]
+    [TestCase(SptBuildType.BleedingEdge, ExpectedResult = "build:bleeding")]
+    [TestCase(SptBuildType.BleedingEdgeMods, ExpectedResult = "build:bleedingmods")]
+    public string ToNodeBuildTask(SptBuildType type)
+    {
+        return type.ToNodeBuildTask();
+    }
+
+    /// <summary>
+    /// Maps a version to the bundled asset set it is overlaid with, pinning the lines that shipped an older loader.
+    /// </summary>
+    [TestCase("3.9.8", ExpectedResult = "mono-legacy-3.x")]
+    [TestCase("3.11.4", ExpectedResult = "mono-legacy-3.x")]
+    [TestCase("4.0.0", ExpectedResult = "mono-legacy-4.0")]
+    [TestCase("4.0.13", ExpectedResult = "mono-legacy-4.0")]
+    [TestCase("4.1.0", ExpectedResult = "mono")]
+    [TestCase("4.1.6", ExpectedResult = "mono")]
+    [TestCase("4.10.0", ExpectedResult = "mono")]
+    [TestCase("5.0.0", ExpectedResult = "il2cpp")]
+    public string AssetFlavourFor(string version)
+    {
+        return BuildRules.AssetFlavourFor(version);
+    }
+
+    /// <summary>
     /// Maps each build type to the MSBuild configuration it compiles under.
     /// </summary>
     [TestCase(SptBuildType.Release, ExpectedResult = "Release")]

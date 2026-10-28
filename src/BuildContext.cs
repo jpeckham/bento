@@ -41,6 +41,36 @@ public sealed class BuildContext
     public bool Il2Cpp => BuildRules.MajorOf(Version) >= 5;
 
     /// <summary>
+    /// 3.x is the Node server, built with npm and packaged by pkg rather than published by dotnet.
+    /// </summary>
+    public bool NodeServer => BuildRules.MajorOf(Version) < 4;
+
+    /// <summary>
+    /// Which bundled static asset set the release is overlaid with.
+    /// </summary>
+    public string AssetFlavour => BuildRules.AssetFlavourFor(Version);
+
+    // 4.1 reorganised the launcher and modules projects. Before it the launcher builds a single Windows binary with
+    // its RID fixed in the csproj, and the modules take -p:Version.
+    private bool PreModernProjects =>
+        BuildRules.MajorOf(Version) < 4 || (BuildRules.MajorOf(Version) == 4 && BuildRules.MinorOf(Version) == 0);
+
+    /// <summary>
+    /// Whether the launcher is published once per runtime identifier rather than built once for Windows.
+    /// </summary>
+    public bool LauncherPublishesPerRid => !PreModernProjects;
+
+    /// <summary>
+    /// The MSBuild property the modules build takes its version from.
+    /// </summary>
+    public string ModulesVersionProperty => PreModernProjects ? "Version" : "SptVersion";
+
+    /// <summary>
+    /// Where the server and launcher sit inside the release tree, empty for the 3.x root layout.
+    /// </summary>
+    public string RuntimeFolder => BuildRules.RuntimeFolderFor(Version);
+
+    /// <summary>
     /// The MSBuild configuration (Release or Debug) this build type compiles under.
     /// </summary>
     public string BuildConfig => BuildRules.BuildConfigFor(BuildType);

@@ -39,9 +39,10 @@ public static class ModulesStep
         var projectDir = ResolveMonoProjectDir(repoPath);
         await UnpackAsync(ctx, modulePackage, Path.Combine(projectDir, "Shared", "Managed"), log, cancellationToken);
 
-        log.Status(Stage, $"building modules (Release, SptVersion={ctx.Version})...");
+        var versionProperty = ctx.ModulesVersionProperty;
+        log.Status(Stage, $"building modules (Release, {versionProperty}={ctx.Version})...");
         await BuildAsync(
-            ["build", "-c", "Release", $"-p:SptVersion={ctx.Version}"],
+            ["build", "-c", "Release", $"-p:{versionProperty}={ctx.Version}"],
             projectDir,
             log,
             cancellationToken
@@ -109,6 +110,9 @@ public static class ModulesStep
         CancellationToken cancellationToken
     )
     {
+        // Clear the target first so we don't have previous builds mixed with this ones
+        Fs.DeleteDirectory(target);
+
         if (modulePackage.IsDirectory)
         {
             log.Status(Stage, $"copying local module files into {Path.GetFileName(target)}...");

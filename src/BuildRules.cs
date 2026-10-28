@@ -81,6 +81,21 @@ public static partial class BuildRules
     }
 
     /// <summary>
+    /// The gulp task the 3.x Node server builds with.
+    /// </summary>
+    public static string ToNodeBuildTask(this SptBuildType type)
+    {
+        return type switch
+        {
+            SptBuildType.Release => "build:release",
+            SptBuildType.Debug => "build:debug",
+            SptBuildType.BleedingEdge => "build:bleeding",
+            SptBuildType.BleedingEdgeMods => "build:bleedingmods",
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
+        };
+    }
+
+    /// <summary>
     /// Maps a build type to the MSBuild configuration it builds under (Release or Debug).
     /// </summary>
     public static string BuildConfigFor(SptBuildType type)
@@ -129,6 +144,44 @@ public static partial class BuildRules
     {
         var dot = version.IndexOf('.');
         return int.Parse(dot < 0 ? version : version[..dot]);
+    }
+
+    /// <summary>
+    /// The second number of an X.Y.Z version, or 0 when it has none.
+    /// </summary>
+    public static int MinorOf(string version)
+    {
+        var dot = version.IndexOf('.');
+        if (dot < 0)
+        {
+            return 0;
+        }
+
+        var rest = version[(dot + 1)..];
+        var next = rest.IndexOf('.');
+        return int.Parse(next < 0 ? rest : rest[..next]);
+    }
+    
+    public static string RuntimeFolderFor(string version)
+    {
+        var major = MajorOf(version);
+        if (major < 4)
+        {
+            return string.Empty;
+        }
+
+        return major == 4 && MinorOf(version) == 0 ? "SPT" : "SPT_Runtime";
+    }
+
+    public static string AssetFlavourFor(string version)
+    {
+        return (MajorOf(version), MinorOf(version)) switch
+        {
+            (>= 5, _) => "il2cpp",
+            (< 4, _) => "mono-legacy-3.x",
+            (4, 0) => "mono-legacy-4.0",
+            _ => "mono",
+        };
     }
 
     /// <summary>

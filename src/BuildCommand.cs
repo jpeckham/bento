@@ -124,7 +124,7 @@ public sealed class BuildCommand : AsyncCommand<BuildSettings>
             AssembleStep.Run(ctx, server, modulesBuild, launcherBuild, log);
             AssembleStep.PrintReleaseTree(ctx.ReleaseDir);
 
-            var packages = await NuGetStep.RunAsync(ctx, log);
+            var packages = ctx.NodeServer ? [] : await NuGetStep.RunAsync(ctx, log);
             var result = await PackageStep.RunAsync(ctx, packages, log);
 
             Fs.DeleteDirectory(ctx.StagingDir);
@@ -248,7 +248,10 @@ public sealed class BuildCommand : AsyncCommand<BuildSettings>
 
         if (versionDll is not null && !File.Exists(versionDll))
         {
-            throw new BentoException($"VERSION_DLL {versionDll} does not exist.", "Point it at the version.dll the loader build produced.");
+            throw new BentoException(
+                $"VERSION_DLL {versionDll} does not exist.",
+                "Point it at the version.dll the loader build produced."
+            );
         }
 
         // Repo paths (dev mode)
@@ -351,8 +354,8 @@ public sealed class BuildCommand : AsyncCommand<BuildSettings>
             ctx.Server = await Preflight.InspectRepoAsync("server", serverPath!, FreshCloneStep.ServerUrl);
             ctx.Modules = await Preflight.InspectRepoAsync("modules", modulesPath!, FreshCloneStep.ModulesUrl);
             ctx.Launcher = await Preflight.InspectRepoAsync("launcher", launcherPath!, FreshCloneStep.LauncherUrl);
-            Preflight.CheckServerLfs(ctx.Server.Path);
-            ctx.ClientVersion = Preflight.ReadClientVersion(ctx.Server.Path);
+            Preflight.CheckServerLfs(ctx.Server.Path, ctx.NodeServer);
+            ctx.ClientVersion = Preflight.ReadClientVersion(ctx.Server.Path, ctx.NodeServer);
 
             if (ctx.ModulePackage is not null || File.Exists(ModulePackageCache.CachePathFor(ctx.ClientVersion)))
             {
@@ -432,7 +435,7 @@ public sealed class BuildCommand : AsyncCommand<BuildSettings>
 
         void StartStages()
         {
-            serverTask = ServerStep.RunAsync(ctx, log);
+            serverTask = ctx.NodeServer ? NodeServerStep.RunAsync(ctx, log) : ServerStep.RunAsync(ctx, log);
             modulesTask = ModulesStep.RunAsync(ctx, modulePackage, log);
             launcherTask = LauncherStep.RunAsync(ctx, log);
         }

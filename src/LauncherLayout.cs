@@ -1,10 +1,12 @@
+using System.Xml.Linq;
+
 namespace Bento;
 
-public sealed record LauncherLayout(string ProjectRoot, string Prefix)
+public sealed record LauncherLayout(string ProjectRoot, string Prefix, string TargetFramework)
 {
     // Newest arrangement first. The launcher was flattened and renamed in the same change, but probing the
     // combinations keeps a half-applied rename buildable.
-    private static readonly string[] KnownPrefixes = ["SPTushonka", "SPTarkov"];
+    private static readonly string[] KnownPrefixes = ["SPTushonka", "SPTarkov", "SPT"];
 
     /// <summary>
     /// Detects the launcher arrangement at repoPath, throwing when no known project layout is present.
@@ -15,9 +17,10 @@ public sealed record LauncherLayout(string ProjectRoot, string Prefix)
         {
             foreach (var prefix in KnownPrefixes)
             {
-                if (File.Exists(Path.Combine(root, $"{prefix}.Launcher", $"{prefix}.Launcher.csproj")))
+                var csproj = Path.Combine(root, $"{prefix}.Launcher", $"{prefix}.Launcher.csproj");
+                if (File.Exists(csproj))
                 {
-                    return new LauncherLayout(root, prefix);
+                    return new LauncherLayout(root, prefix, ReadTargetFramework(root, csproj));
                 }
             }
         }
@@ -32,6 +35,38 @@ public sealed record LauncherLayout(string ProjectRoot, string Prefix)
     /// The launcher project, relative to the project root that dotnet runs in.
     /// </summary>
     public string CsprojRelative => Path.Combine($"{Prefix}.Launcher", $"{Prefix}.Launcher.csproj");
+
+    // 4.1 onward keeps the TFM in Build.props beside the projects. Before that each csproj carried its own.
+    private static string ReadTargetFramework(string projectRoot, string csproj)
+    {
+        var candidates = new[]
+        {
+            Path.Combine(projectRoot, "Build.props"),
+            Path.Combine(projectRoot, "Directory.Build.props"),
+            csproj,
+        };
+
+        foreach (var path in candidates)
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            if (
+                XDocument.Load(path).Descendants("TargetFramework").FirstOrDefault()?.Value.Trim() is
+                { Length: > 0 } framework
+            )
+            {
+                return framework;
+            }
+        }
+
+        throw new BentoException(
+            $"No TargetFramework found for the launcher checkout at {projectRoot}.",
+            "Expected one in Build.props or in the launcher csproj."
+        );
+    }
 
     /// <summary>
     /// The Build directory the launcher's SPTBuildEvent target populates.
@@ -48,7 +83,7 @@ public sealed record LauncherLayout(string ProjectRoot, string Prefix)
             $"{Prefix}.Launcher",
             "bin",
             "Release",
-            "net10.0",
+            TargetFramework,
             platform,
             "publish",
             fileName

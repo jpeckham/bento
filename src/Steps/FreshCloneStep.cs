@@ -7,15 +7,22 @@ namespace Bento.Steps;
 public static class FreshCloneStep
 {
     public const string ServerUrl = "https://github.com/SP-Tushonka/server-csharp.git";
+    public const string NodeServerUrl = "https://github.com/SP-Tushonka/server.git";
     public const string ModulesUrl = "https://github.com/SP-Tushonka/modules.git";
     public const string LauncherUrl = "https://github.com/SP-Tushonka/launcher.git";
 
-    private static readonly (string Name, string Url)[] Repos =
-    [
-        ("server", ServerUrl),
-        ("modules", ModulesUrl),
-        ("launcher", LauncherUrl),
-    ];
+    /// <summary>
+    /// The three repos to clone for a version. 3.x builds the Node server, which is a separate repository.
+    /// </summary>
+    public static (string Name, string Url)[] ReposFor(string version)
+    {
+        return
+        [
+            ("server", BuildRules.MajorOf(version) < 4 ? NodeServerUrl : ServerUrl),
+            ("modules", ModulesUrl),
+            ("launcher", LauncherUrl),
+        ];
+    }
 
     /// <summary>
     /// Verifies the tag exists in all three remote repos, throwing with the list of repos that are missing it.
@@ -24,33 +31,34 @@ public static class FreshCloneStep
     {
         var missing = new List<string>();
         await Task.WhenAll(
-            Repos.Select(async repo =>
-            {
-                status($"checking for tag {tag} in {repo.Name}...");
-                var (exitCode, stdOut, stdErr) = await ProcessRunner.CaptureAsync(
-                    "git",
-                    ["ls-remote", "--tags", repo.Url, tag]
-                );
-                if (exitCode != 0)
+            ReposFor(BuildRules.VersionFromTag(tag))
+                .Select(async repo =>
                 {
-                    throw new BentoException($"git ls-remote failed for {repo.Url}: {stdErr}");
-                }
-
-                // Match both the tag ref and its peeled (^{}) form for annotated tags.
-                var found = stdOut
-                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Any(line =>
-                        line.TrimEnd().EndsWith($"refs/tags/{tag}", StringComparison.Ordinal)
-                        || line.TrimEnd().EndsWith($"refs/tags/{tag}^{{}}", StringComparison.Ordinal)
+                    status($"checking for tag {tag} in {repo.Name}...");
+                    var (exitCode, stdOut, stdErr) = await ProcessRunner.CaptureAsync(
+                        "git",
+                        ["ls-remote", "--tags", repo.Url, tag]
                     );
-                if (!found)
-                {
-                    lock (missing)
+                    if (exitCode != 0)
                     {
-                        missing.Add(repo.Name);
+                        throw new BentoException($"git ls-remote failed for {repo.Url}: {stdErr}");
                     }
-                }
-            })
+
+                    // Match both the tag ref and its peeled (^{}) form for annotated tags.
+                    var found = stdOut
+                        .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                        .Any(line =>
+                            line.TrimEnd().EndsWith($"refs/tags/{tag}", StringComparison.Ordinal)
+                            || line.TrimEnd().EndsWith($"refs/tags/{tag}^{{}}", StringComparison.Ordinal)
+                        );
+                    if (!found)
+                    {
+                        lock (missing)
+                        {
+                            missing.Add(repo.Name);
+                        }
+                    }
+                })
         );
 
         if (missing.Count > 0)
@@ -72,8 +80,9 @@ public static class FreshCloneStep
         Directory.CreateDirectory(root);
         ctx.FreshTempRoot = root;
 
+        var repos = ReposFor(ctx.Version);
         await Task.WhenAll(
-            Repos.Select(repo => CloneOneAsync(repo.Name, repo.Url, ctx.Tag!, Path.Combine(root, repo.Name), log))
+            repos.Select(repo => CloneOneAsync(repo.Name, repo.Url, ctx.Tag!, Path.Combine(root, repo.Name), log))
         );
 
         // Handle LFS assets. Install the hooks locally, then pull.
@@ -82,10 +91,10 @@ public static class FreshCloneStep
         log.Status("server", "pulling Git LFS assets...");
         await RunGitAsync(serverDir, ["lfs", "pull"], log, "server");
 
-        ctx.Server = await Preflight.InspectRepoAsync("server", serverDir, ServerUrl);
+        ctx.Server = await Preflight.InspectRepoAsync("server", serverDir, repos[0].Url);
         ctx.Modules = await Preflight.InspectRepoAsync("modules", Path.Combine(root, "modules"), ModulesUrl);
         ctx.Launcher = await Preflight.InspectRepoAsync("launcher", Path.Combine(root, "launcher"), LauncherUrl);
-        ctx.ClientVersion = Preflight.ReadClientVersion(serverDir);
+        ctx.ClientVersion = Preflight.ReadClientVersion(serverDir, ctx.NodeServer);
     }
 
     /// <summary>
@@ -94,12 +103,21 @@ public static class FreshCloneStep
     private static async Task CloneOneAsync(string name, string url, string tag, string directory, BuildLogger log)
     {
         log.Status(name, $"cloning at {tag}...");
-        await RunGitAsync(
-            workingDirectory: null,
-            ["clone", "--depth", "1", "--branch", tag, "-c", "advice.detachedHead=false", url, directory],
-            log,
-            name
-        );
+        List<string> arguments =
+        [
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            tag,
+            "-c",
+            "advice.detachedHead=false",
+            "-c",
+            "core.longpaths=true",
+        ];
+
+        arguments.AddRange([url, directory]);
+        await RunGitAsync(workingDirectory: null, [.. arguments], log, name);
     }
 
     /// <summary>

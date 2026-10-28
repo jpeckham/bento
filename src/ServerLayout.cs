@@ -2,7 +2,7 @@ using System.Xml.Linq;
 
 namespace Bento;
 
-public sealed record ServerLayout(string RepoPath, string Prefix)
+public sealed record ServerLayout(string RepoPath, string Prefix, string TargetFramework)
 {
     // Newest first, so a checkout that somehow carries both resolves to the current generation.
     private static readonly string[] KnownPrefixes = ["SPTushonka", "SPTarkov"];
@@ -16,7 +16,7 @@ public sealed record ServerLayout(string RepoPath, string Prefix)
         {
             if (Directory.Exists(Path.Combine(repoPath, "Libraries", $"{prefix}.Server.Core")))
             {
-                return new ServerLayout(repoPath, prefix);
+                return new ServerLayout(repoPath, prefix, ReadTargetFramework(repoPath));
             }
         }
 
@@ -36,7 +36,7 @@ public sealed record ServerLayout(string RepoPath, string Prefix)
     /// </summary>
     public string PublishDir(string buildConfig, string platform)
     {
-        return Path.Combine(RepoPath, $"{Prefix}.Server", "bin", buildConfig, "net10.0", platform, "publish");
+        return Path.Combine(RepoPath, $"{Prefix}.Server", "bin", buildConfig, TargetFramework, platform, "publish");
     }
 
     /// <summary>
@@ -73,6 +73,31 @@ public sealed record ServerLayout(string RepoPath, string Prefix)
 
         ids.Sort(StringComparer.Ordinal);
         return ids;
+    }
+    
+    private static string ReadTargetFramework(string repoPath)
+    {
+        foreach (var name in new[] { "Build.props", "Directory.Build.props" })
+        {
+            var path = Path.Combine(repoPath, name);
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            if (
+                XDocument.Load(path).Descendants("TargetFramework").FirstOrDefault()?.Value.Trim() is
+                { Length: > 0 } framework
+            )
+            {
+                return framework;
+            }
+        }
+
+        throw new BentoException(
+            $"No TargetFramework found for the server checkout at {repoPath}.",
+            "Expected one in Build.props or Directory.Build.props at the repo root."
+        );
     }
 
     // Mirrors how dotnet pack resolves an id: PackageId, else AssemblyName, else the project filename. An explicit

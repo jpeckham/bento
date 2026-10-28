@@ -9,7 +9,6 @@ namespace Bento.Steps;
 public static class AssembleStep
 {
     public const string Stage = "assemble";
-    public const string RuntimeFolderName = "SPT_Runtime";
 
     private static readonly string[] PruneFileNames =
     [
@@ -28,17 +27,19 @@ public static class AssembleStep
     {
         Fs.DeleteDirectory(ctx.StagingDir);
         var release = ctx.ReleaseDir;
-        var sptRuntimeDir = Path.Combine(release, RuntimeFolderName);
+        var sptRuntimeDir = ctx.RuntimeFolder.Length == 0 ? release : Path.Combine(release, ctx.RuntimeFolder);
         Directory.CreateDirectory(sptRuntimeDir);
 
         log.Status(Stage, "merging server artifacts...");
-        Fs.CopyDirectory(server.LinuxPublishDir, sptRuntimeDir, ExcludePdb);
-        Fs.CopyDirectory(server.WinPublishDir, sptRuntimeDir, ExcludePdb);
+        foreach (var publishDir in server.PublishDirs)
+        {
+            Fs.CopyDirectory(publishDir, sptRuntimeDir, ExcludePdb);
+        }
 
         log.Status(Stage, "merging launcher artifacts...");
         Fs.CopyDirectory(launcherBuildDir, sptRuntimeDir);
 
-        // Modules land at the release root, not under SPT_Runtime/.
+        // Modules always land at the release root, never in the runtime directory.
         log.Status(Stage, "merging modules artifacts...");
         Fs.CopyDirectory(modulesBuildDir, release);
 
@@ -104,7 +105,10 @@ public static class AssembleStep
 
         if (ctx.VersionDll is null)
         {
-            throw new BentoException("No version.dll for this il2cpp release.", "Pass --version-dll <file> or set VERSION_DLL.");
+            throw new BentoException(
+                "No version.dll for this il2cpp release.",
+                "Pass --version-dll <file> or set VERSION_DLL."
+            );
         }
 
         File.Copy(ctx.VersionDll, Path.Combine(release, "version.dll"), true);
@@ -140,7 +144,7 @@ public static class AssembleStep
     /// </summary>
     private static string StaticAssetsDir(BuildContext ctx)
     {
-        var directory = Path.Combine(AppContext.BaseDirectory, "assets", ctx.Il2Cpp ? "il2cpp" : "mono");
+        var directory = Path.Combine(AppContext.BaseDirectory, "assets", ctx.AssetFlavour);
         if (!Directory.Exists(directory))
         {
             throw new BentoException(

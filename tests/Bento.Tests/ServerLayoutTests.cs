@@ -15,6 +15,7 @@ public class ServerLayoutTests
     {
         _root = Path.Combine(Path.GetTempPath(), $"bento-tests-{Path.GetRandomFileName()}");
         Directory.CreateDirectory(_root);
+        MakeBuildProps("net10.0");
     }
 
     [TearDown]
@@ -88,6 +89,44 @@ public class ServerLayoutTests
         Assert.That(
             ServerLayout.Detect(_root).PackageIds(),
             Is.EqualTo(new[] { "SPTarkov.Common", "SPTushonka.Server.Core" })
+        );
+    }
+
+    /// <summary>
+    /// The target framework comes from the checkout, so 4.0 publishes net9.0 without a Bento change.
+    /// </summary>
+    [Test]
+    public void ReadsTargetFrameworkFromBuildProps()
+    {
+        MakeBuildProps("net9.0");
+        MakeLibrary("SPTarkov.Server.Core", packageId: "SPTarkov.Server.Core");
+
+        var layout = ServerLayout.Detect(_root);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.TargetFramework, Is.EqualTo("net9.0"));
+            Assert.That(layout.PublishDir("Release", "win-x64"), Does.Contain("net9.0"));
+        });
+    }
+
+    /// <summary>
+    /// A checkout with no target framework anywhere is an error rather than a guessed one.
+    /// </summary>
+    [Test]
+    public void MissingTargetFrameworkThrows()
+    {
+        File.Delete(Path.Combine(_root, "Build.props"));
+        MakeLibrary("SPTushonka.Server.Core", packageId: "SPTushonka.Server.Core");
+
+        Assert.That(() => ServerLayout.Detect(_root), Throws.TypeOf<BentoException>());
+    }
+
+    private void MakeBuildProps(string targetFramework)
+    {
+        File.WriteAllText(
+            Path.Combine(_root, "Build.props"),
+            $"<Project><PropertyGroup><TargetFramework>{targetFramework}</TargetFramework></PropertyGroup></Project>"
         );
     }
 

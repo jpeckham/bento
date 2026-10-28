@@ -1,11 +1,6 @@
 namespace Bento.Steps;
 
 /// <summary>
-/// The server's win-x64 and linux-x64 publish output directories.
-/// </summary>
-public sealed record ServerArtifacts(string WinPublishDir, string LinuxPublishDir);
-
-/// <summary>
 /// Publishes the server for win-x64 and linux-x64.
 /// </summary>
 public static class ServerStep
@@ -38,7 +33,7 @@ public static class ServerStep
                 "-c",
                 ctx.BuildConfig,
                 "-f",
-                "net10.0",
+                layout.TargetFramework,
                 "-r",
                 platform,
                 "-p:IncludeNativeLibrariesForSelfExtract=true",
@@ -63,12 +58,12 @@ public static class ServerStep
                 throw new StageFailedException(Stage, $"Server publish for {platform} failed (exit {exitCode}).");
             }
         }
-
-        var artifacts = new ServerArtifacts(
+        
+        var artifacts = new ServerArtifacts([
+            layout.PublishDir(ctx.BuildConfig, "linux-x64"),
             layout.PublishDir(ctx.BuildConfig, "win-x64"),
-            layout.PublishDir(ctx.BuildConfig, "linux-x64")
-        );
-        foreach (var directory in new[] { artifacts.WinPublishDir, artifacts.LinuxPublishDir })
+        ]);
+        foreach (var directory in artifacts.PublishDirs)
         {
             if (!Directory.Exists(directory))
             {

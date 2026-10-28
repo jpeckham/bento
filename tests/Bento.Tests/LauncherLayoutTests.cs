@@ -75,10 +75,32 @@ public class LauncherLayoutTests
         Assert.That(() => LauncherLayout.Detect(_root), Throws.TypeOf<BentoException>());
     }
 
-    private static void MakeProject(string root, string prefix)
+    /// <summary>
+    /// The pre-4.1 launcher sits under project/ as SPT.Launcher and keeps its target framework in the csproj.
+    /// </summary>
+    [Test]
+    public void DetectsPreRenameLauncher()
+    {
+        var project = Path.Combine(_root, "project");
+        MakeProject(project, "SPT", "net9.0");
+
+        var layout = LauncherLayout.Detect(_root);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(layout.Prefix, Is.EqualTo("SPT"));
+            Assert.That(layout.ProjectRoot, Is.EqualTo(project));
+            Assert.That(layout.TargetFramework, Is.EqualTo("net9.0"));
+        });
+    }
+
+    private static void MakeProject(string root, string prefix, string targetFramework = "net10.0")
     {
         var directory = Path.Combine(root, $"{prefix}.Launcher");
         Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, $"{prefix}.Launcher.csproj"), "<Project />");
+        File.WriteAllText(
+            Path.Combine(directory, $"{prefix}.Launcher.csproj"),
+            $"<Project><PropertyGroup><TargetFramework>{targetFramework}</TargetFramework></PropertyGroup></Project>"
+        );
     }
 }
